@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "packages": [
+    {
+      "name": "models",
+      "emit_json_tags": true,
+      "emit_prepared_queries": true,
+      "emit_interface": true,
+      "path": "sqlc/models/",
+      "queries": "sqlc/queries/",
+      "schema": "sqlc/schemas/"
+    }
+  ]
+}

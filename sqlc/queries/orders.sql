@@ -1,0 +1,16 @@
+-- name: CreateOrder :one
+INSERT INTO orders (chat_id, title, expiry)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- name: GetActiveOrder :one
+SELECT * FROM orders
+WHERE chat_id = $1
+AND expiry > $2
+AND active = TRUE;
+
+-- name: CancelOrder :exec
+UPDATE orders
+SET active = FALSE
+WHERE chat_id = $1
+AND active = TRUE;

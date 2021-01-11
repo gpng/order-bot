@@ -1,0 +1,9 @@
+# env variables
+.env
+.env.prod
+
+# build folder
+bin/*
+
+# db data
+db-data
