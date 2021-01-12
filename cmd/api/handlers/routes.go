@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"github.com/go-chi/chi"
-	_ "github.com/gpng/order-bot/docs" // required for generating docs
 )
 
 // Routes for app

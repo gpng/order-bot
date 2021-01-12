@@ -1,12 +1,3 @@
-// @title Golang API
-// @version 0.0.1
-// @description Simple REST API using golang
-
-// @contact.name Developers
-// @contact.email dev@localhost
-
-// @host localhost:4000
-// @BasePath /
 package main
 
 import (
