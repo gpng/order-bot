@@ -137,10 +137,22 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 	}
 
 	now = time.Now().In(location)
-	diff := expiryTime.Sub(now)
+	diff := expiryTime.Sub(now).Seconds()
 
-	_, err = h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff.Seconds()), work.Q{
-		"order_id": int64(order.ID),
+	if diff > 600 { // only notify 5 minutes before if more than 10 minutes to go
+		_, err = h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff-300), work.Q{
+			jobArgOrderID:   int64(order.ID),
+			jobArgPreExpiry: true,
+		})
+		if err != nil {
+			l.Error("error scheduling job", zap.Error(err))
+			return err
+		}
+	}
+
+	_, err = h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff), work.Q{
+		jobArgOrderID:   int64(order.ID),
+		jobArgPreExpiry: false,
 	})
 	if err != nil {
 		l.Error("error scheduling job", zap.Error(err))
@@ -234,10 +246,10 @@ func (h *Handlers) handlerOrder(chatID int64, text string, user models.User) err
 	}
 	quantity = quantity + int(item.Quantity)
 
-	return h.sendOverview(l, order)
+	return h.sendOverview(l, order, false)
 }
 
-func (h *Handlers) sendOverview(l *zap.Logger, order models.Order) error {
+func (h *Handlers) sendOverview(l *zap.Logger, order models.Order, isPreExpiry bool) error {
 	items, err := h.Repo.GetItemsByOrderID(context.Background(), order.ID)
 	if err != nil {
 		l.Error("error getting order items", zap.Error(err))
@@ -252,9 +264,16 @@ func (h *Handlers) sendOverview(l *zap.Logger, order models.Order) error {
 
 	now := time.Now().In(location)
 
+	title := order.Title
+
 	expiry := order.Expiry.Format("15:04")
 	if order.Expiry.Day() > now.Day() {
 		expiry += " tomorrow"
+	}
+
+	if isPreExpiry {
+		expiry += " in 5 minutes"
+		title = "REMINDER\n" + title
 	}
 
 	allItems := map[string]int{}
@@ -270,7 +289,7 @@ func (h *Handlers) sendOverview(l *zap.Logger, order models.Order) error {
 		allItemsText += fmt.Sprintf("%d x %s\n", quantity, name)
 	}
 
-	h.Bot.SendMessage(int64(order.ChatID), true, fmt.Sprintf(`
+	message := fmt.Sprintf(`
 *%s*
 %s
 
@@ -278,7 +297,9 @@ func (h *Handlers) sendOverview(l *zap.Logger, order models.Order) error {
 
 *Consolidated*
 %s
-`, order.Title, expiry, itemsText, allItemsText))
+`, title, expiry, itemsText, allItemsText)
+
+	h.Bot.SendMessage(int64(order.ChatID), true, message)
 
 	return nil
 }
