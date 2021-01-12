@@ -11,9 +11,12 @@ require (
 	github.com/go-playground/locales v0.13.0
 	github.com/go-playground/universal-translator v0.17.0
 	github.com/go-playground/validator/v10 v10.4.1
+	github.com/gocraft/work v0.5.1
+	github.com/gomodule/redigo v1.8.3
 	github.com/jinzhu/gorm v1.9.16
 	github.com/joho/godotenv v1.3.0
 	github.com/lib/pq v1.9.0
+	github.com/robfig/cron v1.2.0 // indirect
 	github.com/swaggo/swag v1.7.0
 	go.uber.org/zap v1.16.0
 	golang.org/x/net v0.0.0-20201207224615-747e23833adb // indirect

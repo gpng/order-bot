@@ -10,9 +10,11 @@ type Querier interface {
 	CancelOrder(ctx context.Context, chatID int32) error
 	CreateItem(ctx context.Context, arg CreateItemParams) (Item, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
+	DeactivateOrder(ctx context.Context, id int32) error
 	GetActiveOrder(ctx context.Context, arg GetActiveOrderParams) (Order, error)
 	GetItem(ctx context.Context, arg GetItemParams) (Item, error)
 	GetItemsByOrderID(ctx context.Context, orderID int32) ([]Item, error)
+	GetOrderByID(ctx context.Context, id int32) (Order, error)
 	UpdateItemQuantity(ctx context.Context, arg UpdateItemQuantityParams) (Item, error)
 }
 

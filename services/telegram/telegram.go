@@ -20,9 +20,11 @@ func New(token string) (*Bot, error) {
 }
 
 // SendMessage util
-func (bot *Bot) SendMessage(chatID int64, text string) {
+func (bot *Bot) SendMessage(chatID int64, formatMarkdown bool, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = tgbotapi.ModeMarkdownV2
+	if formatMarkdown {
+		msg.ParseMode = tgbotapi.ModeMarkdownV2
+	}
 	msg.DisableWebPagePreview = true
 	bot.BotAPI.Send(msg)
 }

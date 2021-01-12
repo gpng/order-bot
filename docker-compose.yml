@@ -10,6 +10,17 @@ services:
     environment:
       - POSTGRES_DB=order-bot-dev
       - POSTGRES_PASSWORD=postgres
+
+  cache:
+    image: "redis:alpine"
+    ports:
+      - 6379:6379
+    volumes: 
+      - redis:/data
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - TZ=Asia/Singapore
+
   api:
     image: order-bot:latest
     ports:
@@ -18,6 +29,7 @@ services:
       - ./:/app
     links:
       - database
+      - cache
     environment:
       - PORT=4000
       - DB_HOST=database
@@ -25,5 +37,8 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=order-bot-dev
+      - REDIS_URL=redis://cache:6379/0
+
 volumes:
   psql: {}
+  redis: {}

@@ -45,6 +45,17 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 	return i, err
 }
 
+const deactivateOrder = `-- name: DeactivateOrder :exec
+UPDATE orders
+SET active = FALSE
+WHERE id = $1
+`
+
+func (q *Queries) DeactivateOrder(ctx context.Context, id int32) error {
+	_, err := q.exec(ctx, q.deactivateOrderStmt, deactivateOrder, id)
+	return err
+}
+
 const getActiveOrder = `-- name: GetActiveOrder :one
 SELECT id, chat_id, title, expiry, active FROM orders
 WHERE chat_id = $1
@@ -59,6 +70,24 @@ type GetActiveOrderParams struct {
 
 func (q *Queries) GetActiveOrder(ctx context.Context, arg GetActiveOrderParams) (Order, error) {
 	row := q.queryRow(ctx, q.getActiveOrderStmt, getActiveOrder, arg.ChatID, arg.Expiry)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.Title,
+		&i.Expiry,
+		&i.Active,
+	)
+	return i, err
+}
+
+const getOrderByID = `-- name: GetOrderByID :one
+SELECT id, chat_id, title, expiry, active FROM orders
+WHERE id = $1
+`
+
+func (q *Queries) GetOrderByID(ctx context.Context, id int32) (Order, error) {
+	row := q.queryRow(ctx, q.getOrderByIDStmt, getOrderByID, id)
 	var i Order
 	err := row.Scan(
 		&i.ID,

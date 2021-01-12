@@ -12,6 +12,8 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 
 	"github.com/gpng/order-bot/services/telegram"
 
@@ -23,6 +25,8 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"github.com/gocraft/work"
+	"github.com/gomodule/redigo/redis"
 )
 
 func main() {
@@ -30,6 +34,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load env vars: %v", err)
 	}
+	log.Printf("cfg: %v\n", cfg)
 
 	// initialise services
 	l := logger.New()
@@ -42,23 +47,70 @@ func main() {
 
 	repo := models.New(db)
 
+	redisPool := &redis.Pool{
+		MaxActive: 5,
+		MaxIdle:   5,
+		Wait:      true,
+		Dial: func() (redis.Conn, error) {
+			return redis.DialURL(cfg.RedisURL, redis.DialPassword(cfg.RedisPassword))
+		},
+	}
+
+	conn := redisPool.Get()
+	defer conn.Close()
+	_, err = conn.Do("PING")
+	if err != nil {
+		log.Fatalf("failed to connect to redis: %v", err)
+	}
+	log.Println("redis connection successful")
+
 	bot, err := telegram.New(cfg.BotToken)
 	if err != nil {
 		log.Fatalf("failed to initialise bot: %v", err)
 	}
 
-	handlers := handlers.New(l, db, repo, bot)
+	enqeuer := work.NewEnqueuer(cfg.RedisNamespace, redisPool)
+	pool := work.NewWorkerPool(handlers.Handlers{}, 10, cfg.RedisNamespace, redisPool)
+
+	pool.Middleware(func(c *handlers.Handlers, job *work.Job, next work.NextMiddlewareFunc) error {
+		c.Queue = enqeuer
+		c.Logger = l
+		c.DB = db
+		c.Repo = repo
+		c.Bot = bot
+		return next()
+	})
+
+	pool.JobWithOptions(string(handlers.JobNotifyExpiry), work.JobOptions{
+		MaxConcurrency: 1,
+		MaxFails:       3,
+	}, (*handlers.Handlers).JobNotifyExpiry)
+
+	h := handlers.New(l, db, repo, bot, enqeuer)
 
 	// initialise main router with basic middlewares, cors settings etc
 	router := mainRouter()
 
-	// mount services
-	router.Mount("/", handlers.Routes())
+	router.Mount("/", h.Routes())
 
-	err = http.ListenAndServe(":4000", router)
+	log.Println("starting worker pool...")
+	pool.Start()
+	// defer pool.Stop()
+
+	if err != nil {
+		log.Printf("err: %v\n", err)
+	}
+
+	log.Println("listening to port " + cfg.Port)
+	err = http.ListenAndServe(":"+cfg.Port, router)
 	if err != nil {
 		log.Print(err)
 	}
+
+	// Wait for a signal to quit:
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, os.Kill)
+	<-signalChan
 }
 
 func mainRouter() chi.Router {

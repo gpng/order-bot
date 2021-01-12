@@ -14,3 +14,12 @@ UPDATE orders
 SET active = FALSE
 WHERE chat_id = $1
 AND active = TRUE;
+
+-- name: GetOrderByID :one
+SELECT * FROM orders
+WHERE id = $1;
+
+-- name: DeactivateOrder :exec
+UPDATE orders
+SET active = FALSE
+WHERE id = $1;
