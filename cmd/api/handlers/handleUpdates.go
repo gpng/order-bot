@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -53,29 +52,29 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 
 			var err error
 			switch strings.ToLower(split[0]) {
-			case "/takeorders", "/takeorder", "/collectorders", "/collectorder", "/neworder", "/neworders":
+			case "/takeorders", "/takeorder":
 				err = h.handleNewOrder(chatID, text)
 				break
-			case "/cancelorder":
-				err = h.handleCancelOrder(chatID)
+			case "/canceltakeorder", "/canceltakeorders":
+				err = h.handleCancelTakeOrder(chatID)
 				break
 			case "/order":
 				err = h.handlerOrder(chatID, text, update.Message.From)
 				break
-			case "/deleteorder", "/removeorder":
-				err = h.handleDeleteOrder(chatID, update.Message.From)
+			case "/cancelorder", "/removeorder":
+				err = h.handleCancelOrder(chatID, update.Message.From)
 				break
 			}
 
 			if err != nil {
-				h.Bot.SendMessage(chatID, false, "Oops something went wrong")
+				h.Bot.SendMessage(chatID, false, MsgError)
 			}
 		}
 	}
 }
 
-func (h *Handlers) handleCancelOrder(chatID int64) error {
-	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/cancelorder"))
+func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
+	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/canceltakeorder"))
 
 	err := h.Repo.CancelOrder(context.Background(), int32(chatID))
 	if err != nil {
@@ -83,18 +82,18 @@ func (h *Handlers) handleCancelOrder(chatID int64) error {
 		return nil
 	}
 
-	h.Bot.SendMessage(chatID, false, "Active order cancelled")
+	h.Bot.SendMessage(chatID, false, MsgCancelTakeOrders)
 
 	return nil
 }
 
 func (h *Handlers) handleNewOrder(chatID int64, text string) error {
-	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/neworder"))
+	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/takeorders"))
 
 	split := strings.Split(text, " ")
 
 	if len(split) < 3 {
-		h.Bot.SendMessage(chatID, false, "Invalid format! Create new order collection like /neworder 15:30 SoGood Bakery")
+		h.Bot.SendMessage(chatID, false, MsgNewTakeOrderInvalidFormat)
 		return nil
 	}
 
@@ -106,7 +105,7 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 		return err
 	}
 	if !r.MatchString(expiry) {
-		h.Bot.SendMessage(chatID, false, "Invalid time! Create new order collection like /neworder 15:30 SoGood Bakery")
+		h.Bot.SendMessage(chatID, false, MsgNewTakeOrderInvalidTime)
 		return nil
 	}
 
@@ -114,13 +113,13 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 
 	hour, err := strconv.Atoi(expirySplit[0])
 	if err != nil {
-		h.Bot.SendMessage(chatID, false, "Invalid time! Create new order collection like /neworder 15:30 SoGood Bakery")
+		h.Bot.SendMessage(chatID, false, MsgNewTakeOrderInvalidTime)
 		return nil
 	}
 
 	min, err := strconv.Atoi(expirySplit[1])
 	if err != nil {
-		h.Bot.SendMessage(chatID, false, "Invalid time! Create new order collection like /neworder 15:30 SoGood Bakery")
+		h.Bot.SendMessage(chatID, false, MsgNewTakeOrderInvalidTime)
 		return nil
 	}
 
@@ -148,7 +147,7 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 		return err
 	}
 	if err == nil {
-		h.Bot.SendMessage(chatID, false, "There is already an existing order for "+activeOrder.Title+". Use /cancelorder to cancel the current active order")
+		h.Bot.SendMessage(chatID, false, MsgNewTakeOrderExistingOrder(activeOrder.Title))
 		return nil
 	}
 
@@ -213,7 +212,7 @@ func (h *Handlers) handlerOrder(chatID int64, text string, user models.User) err
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			h.Bot.SendMessage(chatID, false, "No active orders! Create new order collection like /neworder 15:30 SoGood Bakery")
+			h.Bot.SendMessage(chatID, false, MsgNoActiveOrders)
 			return nil
 		}
 
@@ -224,13 +223,13 @@ func (h *Handlers) handlerOrder(chatID int64, text string, user models.User) err
 	split := strings.Split(text, " ")
 
 	if len(split) < 3 {
-		h.Bot.SendMessage(chatID, false, "Invalid order! Add to the order like /order 2 chicken pie")
+		h.Bot.SendMessage(chatID, false, MsgOrderInvalidFormat)
 		return nil
 	}
 
 	quantity, err := strconv.Atoi(split[1])
 	if err != nil || quantity <= 0 {
-		h.Bot.SendMessage(chatID, false, "Invalid quantity! Add to the order like /order 2 chicken pie")
+		h.Bot.SendMessage(chatID, false, MsgOrderInvalidQuantity)
 		return nil
 	}
 
@@ -276,8 +275,6 @@ func (h *Handlers) handlerOrder(chatID int64, text string, user models.User) err
 }
 
 func (h *Handlers) sendOverview(l *zap.Logger, order models.Order, isPreExpiry bool) error {
-	log.Printf("isPreExpiry: %v\n", isPreExpiry)
-	log.Printf("order: %v\n", order)
 	items, err := h.Repo.GetItemsByOrderID(context.Background(), order.ID)
 	if err != nil {
 		l.Error("error getting order items", zap.Error(err))
@@ -336,7 +333,7 @@ func getLocation() (*time.Location, error) {
 	return time.LoadLocation("Asia/Singapore")
 }
 
-func (h *Handlers) handleDeleteOrder(chatID int64, user models.User) error {
+func (h *Handlers) handleCancelOrder(chatID int64, user models.User) error {
 	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/deleteorder"))
 
 	location, err := getLocation()
@@ -352,7 +349,7 @@ func (h *Handlers) handleDeleteOrder(chatID int64, user models.User) error {
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			h.Bot.SendMessage(chatID, false, "No group orders active")
+			h.Bot.SendMessage(chatID, false, MsgNoActiveOrders)
 			return nil
 		}
 		l.Error("failed to retrieve active order", zap.Error(err))
@@ -365,7 +362,7 @@ func (h *Handlers) handleDeleteOrder(chatID int64, user models.User) error {
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			h.Bot.SendMessage(chatID, false, "No orders")
+			h.Bot.SendMessage(chatID, false, MsgNoOrders)
 			return nil
 		}
 		l.Error("failed to retrieve user items", zap.Error(err))
@@ -384,7 +381,7 @@ func (h *Handlers) handleDeleteOrder(chatID int64, user models.User) error {
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 
-	h.Bot.SendInlineKeyboardMessage(chatID, "Select order item to delete", keyboard)
+	h.Bot.SendInlineKeyboardMessage(chatID, MsgSelectDeleteOrder, keyboard)
 
 	return nil
 }
@@ -398,7 +395,7 @@ func (h *Handlers) handleDeleteItem(cq models.CallbackQuery) error {
 	split := strings.Split(cq.Data, " ")
 	if len(split) < 2 {
 		l.Error("invalid delete item format", zap.String("data", cq.Data))
-		h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, "Invalid item")
+		h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, MsgInvalidItem)
 		return nil
 	}
 
@@ -415,7 +412,7 @@ func (h *Handlers) handleDeleteItem(cq models.CallbackQuery) error {
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, "No group orders active")
+			h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, MsgNoActiveOrders)
 			return nil
 		}
 		l.Error("failed to retrieve active order", zap.Error(err))
@@ -425,7 +422,7 @@ func (h *Handlers) handleDeleteItem(cq models.CallbackQuery) error {
 	itemID, err := strconv.Atoi(split[1])
 	if err != nil {
 		l.Error("invalid item id", zap.String("data", cq.Data), zap.Error(err))
-		h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, "Invalid item")
+		h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, MsgInvalidItem)
 		return nil
 	}
 
@@ -435,14 +432,14 @@ func (h *Handlers) handleDeleteItem(cq models.CallbackQuery) error {
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, "Invalid item")
+			h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, MsgInvalidItem)
 			return nil
 		}
 		l.Error("failed to delete item", zap.Error(err))
 		return err
 	}
 
-	h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, fmt.Sprintf("Deleted order: %d x %s", item.Quantity, item.Name))
+	h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, MsgDeletedOrder(int(item.Quantity), item.Name))
 
 	h.sendOverview(l, order, false)
 
@@ -456,7 +453,7 @@ func (h *Handlers) handleCancelDeleteOrder(cq models.CallbackQuery) error {
 				ChatID:    cq.Message.Chat.ID,
 				MessageID: cq.Message.MessageID,
 			},
-			Text: "Canceled delete order",
+			Text: MsgCanceledDeleteOrderRequest,
 		}
 		h.Bot.BotAPI.Send(msg)
 	}
