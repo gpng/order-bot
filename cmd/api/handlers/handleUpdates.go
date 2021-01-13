@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	tgbotapi "github.com/dilfish/telegram-bot-api-up"
 	"github.com/gocraft/work"
 	"github.com/gpng/order-bot/sqlc/models"
 	"go.uber.org/zap"
@@ -25,25 +27,49 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 			return
 		}
 
-		chatID := update.Message.Chat.ID
-		text := update.Message.Text
-		split := strings.Split(text, " ")
-
-		var err error
-		switch strings.ToLower(split[0]) {
-		case "/neworder":
-			err = h.handleNewOrder(chatID, text)
-			break
-		case "/cancelorder":
-			err = h.handleCancelOrder(chatID)
-			break
-		case "/order":
-			err = h.handlerOrder(chatID, text, update.Message.From)
-			break
+		if update.CallbackQuery != nil {
+			var err error
+			switch strings.ToLower(strings.Split(update.CallbackQuery.Data, " ")[0]) {
+			case "/delete":
+				err = h.handleDeleteItem(*update.CallbackQuery)
+				break
+			case "/cancel":
+				err = h.handleCancelDeleteOrder(*update.CallbackQuery)
+				break
+			}
+			h.Bot.BotAPI.AnswerCallbackQuery(tgbotapi.NewCallback(update.CallbackQuery.ID, ""))
+			if err != nil {
+				
+				return
+			}
+			return
 		}
 
-		if err != nil {
-			h.Bot.SendMessage(chatID, false, "Oops something went wrong")
+		if update.Message != nil {
+			chatID := update.Message.Chat.ID
+			log.Printf("chatID: %v\n", chatID)
+			text := update.Message.Text
+			split := strings.Split(text, " ")
+	
+			var err error
+			switch strings.ToLower(split[0]) {
+			case "/takeorders", "/takeorder", "/collectorders", "/collectorder", "/neworder", "/neworders":
+				err = h.handleNewOrder(chatID, text)
+				break
+			case "/cancelorder":
+				err = h.handleCancelOrder(chatID)
+				break
+			case "/order":
+				err = h.handlerOrder(chatID, text, update.Message.From)
+				break
+			case "/deleteorder", "/removeorder":
+				err = h.handleDeleteOrder(chatID, update.Message.From)
+				break
+			}
+	
+			if err != nil {
+				h.Bot.SendMessage(chatID, false, "Oops something went wrong")
+			}
 		}
 	}
 }
@@ -279,7 +305,7 @@ func (h *Handlers) sendOverview(l *zap.Logger, order models.Order, isPreExpiry b
 	allItems := map[string]int{}
 	itemsText := ""
 	for _, item := range items {
-		itemsText += fmt.Sprintf("[%s](tg://user?id=%d) %d %s\n", item.UserName, item.UserID, item.Quantity, item.Name)
+		itemsText += fmt.Sprintf("[%s](tg://user?id=%d) %d x %s\n", item.UserName, item.UserID, item.Quantity, item.Name)
 		lowered := strings.ToLower(item.Name)
 		allItems[lowered] += int(item.Quantity)
 	}
@@ -306,4 +332,126 @@ func (h *Handlers) sendOverview(l *zap.Logger, order models.Order, isPreExpiry b
 
 func getLocation() (*time.Location, error) {
 	return time.LoadLocation("Asia/Singapore")
+}
+
+func (h *Handlers) handleDeleteOrder(chatID int64, user models.User) error {
+	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/deleteorder"))
+
+	location, err := getLocation()
+	if err != nil {
+		l.Error("error loading time location", zap.Error(err))
+		return nil
+	}
+	now := time.Now().In(location)
+
+	order, err := h.Repo.GetActiveOrder(context.Background(), models.GetActiveOrderParams{
+		ChatID: int32(chatID),
+		Expiry: now,
+	})
+	if err != nil {
+		l.Error("failed to retrieve active order", zap.Error(err))
+		return err
+	}
+
+	items, err := h.Repo.GetUserItems(context.Background(), models.GetUserItemsParams{
+		UserID: int32(user.ID),
+		OrderID: order.ID,
+	})
+	if err != nil {
+		l.Error("failed to retrieve user items", zap.Error(err))
+		return err
+	}
+
+	rows := make([][]tgbotapi.InlineKeyboardButton, len(items))
+	for i, item := range items {
+		rows[i] = tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(item.Name, "/delete " + strconv.Itoa(int(item.ID))),
+		)
+	}
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("Cancel", "/cancel"),
+	))
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	h.Bot.SendInlineKeyboardMessage(chatID, "Select order item to delete", keyboard)
+
+	return nil
+}
+
+func (h *Handlers) handleDeleteItem(callbackQuery models.CallbackQuery) error {
+	if callbackQuery.Message == nil {
+		return nil
+	}
+	l := h.Logger.With(zap.Int64("chat_id", callbackQuery.Message.Chat.ID), zap.String("command", "/deleteitem"))
+
+	split := strings.Split(callbackQuery.Data, " ")
+	if len(split) < 2 {
+		l.Error("invalid delete item format", zap.String("data", callbackQuery.Data))
+		msg := tgbotapi.EditMessageTextConfig{
+			BaseEdit: tgbotapi.BaseEdit{
+				ChatID: callbackQuery.Message.Chat.ID,
+				MessageID: callbackQuery.Message.MessageID,
+			},
+			Text: "Invalid Item",
+		}
+		h.Bot.BotAPI.Send(msg)
+		return nil
+	 }
+
+	itemID, err := strconv.Atoi(split[1])
+	if err != nil {
+	l.Error("invalid item id", zap.String("data", callbackQuery.Data), zap.Error(err))
+	msg := tgbotapi.EditMessageTextConfig{
+		BaseEdit: tgbotapi.BaseEdit{
+			ChatID: callbackQuery.Message.Chat.ID,
+			MessageID: callbackQuery.Message.MessageID,
+		},
+		Text: "Invalid Item",
+	}
+	h.Bot.BotAPI.Send(msg)
+	return nil
+	}
+	
+	item, err := h.Repo.DeleteItemByUser(context.Background(), models.DeleteItemByUserParams{
+		ID: int32(itemID),
+		UserID: int32(callbackQuery.From.ID),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			msg := tgbotapi.EditMessageTextConfig{
+				BaseEdit: tgbotapi.BaseEdit{
+					ChatID: callbackQuery.Message.Chat.ID,
+					MessageID: callbackQuery.Message.MessageID,
+				},
+				Text: "Invalid Item",
+			}
+			h.Bot.BotAPI.Send(msg)
+			return nil
+		}
+		return err
+	}
+	msg := tgbotapi.EditMessageTextConfig{
+		BaseEdit: tgbotapi.BaseEdit{
+			ChatID: callbackQuery.Message.Chat.ID,
+			MessageID: callbackQuery.Message.MessageID,
+		},
+		Text: "Order item removed",
+	}
+	h.Bot.BotAPI.Send(msg)
+	return nil
+}
+
+func (h *Handlers)  handleCancelDeleteOrder(callbackQuery models.CallbackQuery) error {
+	 if callbackQuery.Message != nil {
+		 msg := tgbotapi.EditMessageTextConfig{
+			 BaseEdit: tgbotapi.BaseEdit{
+				 ChatID: callbackQuery.Message.Chat.ID,
+				 MessageID: callbackQuery.Message.MessageID,
+			 },
+			 Text: "Canceled delete order",
+		 }
+		h.Bot.BotAPI.Send(msg)
+	 }
+	return nil
 }

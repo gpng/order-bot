@@ -77,7 +77,7 @@ func main() {
 		MaxFails:       3,
 	}, (*handlers.Handlers).JobNotifyExpiry)
 
-	h := handlers.New(l, db, repo, bot, enqeuer)
+	h := handlers.New(cfg.BotToken, l, db, repo, bot, enqeuer)
 
 	// initialise main router with basic middlewares, cors settings etc
 	router := mainRouter()

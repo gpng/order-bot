@@ -5,12 +5,14 @@ import (
 )
 
 // Routes for app
-func (s *Handlers) Routes() chi.Router {
+func (h *Handlers) Routes() chi.Router {
 	router := chi.NewRouter()
 
-	router.Get("/", s.handleStatus())
+	router.Get("/", h.handleStatus())
 
-	router.Post("/updates", s.handleUpdates())
+	router.Route("/" + h.BotToken, func (r chi.Router) {
+		r.Post("/", h.handleUpdates())
+	})
 
 	return router
 }

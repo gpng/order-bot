@@ -20,3 +20,12 @@ WHERE order_id = $1
 AND user_id = $2
 AND LOWER(name) = LOWER($3)
 RETURNING *;
+
+-- name: GetUserItems :many
+SELECT * FROM items
+WHERE user_id = $1 AND order_id = $2;
+
+-- name: DeleteItemByUser :one
+DELETE FROM items
+WHERE id = $1 AND user_id = $2
+RETURNING *;

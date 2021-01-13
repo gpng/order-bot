@@ -11,10 +11,12 @@ type Querier interface {
 	CreateItem(ctx context.Context, arg CreateItemParams) (Item, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	DeactivateOrder(ctx context.Context, id int32) error
+	DeleteItemByUser(ctx context.Context, arg DeleteItemByUserParams) (Item, error)
 	GetActiveOrder(ctx context.Context, arg GetActiveOrderParams) (Order, error)
 	GetItem(ctx context.Context, arg GetItemParams) (Item, error)
 	GetItemsByOrderID(ctx context.Context, orderID int32) ([]Item, error)
 	GetOrderByID(ctx context.Context, id int32) (Order, error)
+	GetUserItems(ctx context.Context, arg GetUserItemsParams) ([]Item, error)
 	UpdateItemQuantity(ctx context.Context, arg UpdateItemQuantityParams) (Item, error)
 }
 

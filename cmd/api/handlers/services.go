@@ -9,6 +9,7 @@ import (
 
 // Handlers struct
 type Handlers struct {
+	BotToken string
 	Logger *zap.Logger
 	DB     models.DBTX
 	Repo   models.Querier
@@ -18,13 +19,14 @@ type Handlers struct {
 
 // New service
 func New(
+	botToken string,
 	logger *zap.Logger,
 	db models.DBTX,
 	repo models.Querier,
 	bot *telegram.Bot,
 	queue *work.Enqueuer,
 ) *Handlers {
-	return &Handlers{logger, db, repo, bot, queue}
+	return &Handlers{botToken, logger, db, repo, bot, queue}
 }
 
 // JobName are job names

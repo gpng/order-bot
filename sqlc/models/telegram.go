@@ -23,5 +23,16 @@ type Message struct {
 // TelegramUpdate model
 type TelegramUpdate struct {
 	UpdateID int     `json:"update_id"`
-	Message  Message `json:"message"`
+	Message  *Message `json:"message"`
+	CallbackQuery *CallbackQuery `json:"callback_query"`
+}
+
+// CallbackQuery model
+type CallbackQuery struct {
+	ID string `json:"id"`
+	From User `json:"from"`
+	Data string `json:"data"`
+	Message *Message `json:"message"`
+	InlineMessageID string `json:"inline_message_id"`
+	ChatInstance string `json:"chat_instance"`
 }

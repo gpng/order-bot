@@ -41,6 +41,31 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Item, e
 	return i, err
 }
 
+const deleteItemByUser = `-- name: DeleteItemByUser :one
+DELETE FROM items
+WHERE id = $1 AND user_id = $2
+RETURNING id, user_id, user_name, order_id, quantity, name
+`
+
+type DeleteItemByUserParams struct {
+	ID     int32 `json:"id"`
+	UserID int32 `json:"user_id"`
+}
+
+func (q *Queries) DeleteItemByUser(ctx context.Context, arg DeleteItemByUserParams) (Item, error) {
+	row := q.queryRow(ctx, q.deleteItemByUserStmt, deleteItemByUser, arg.ID, arg.UserID)
+	var i Item
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.UserName,
+		&i.OrderID,
+		&i.Quantity,
+		&i.Name,
+	)
+	return i, err
+}
+
 const getItem = `-- name: GetItem :one
 SELECT id, user_id, user_name, order_id, quantity, name FROM items
 WHERE order_id = $1
@@ -75,6 +100,46 @@ WHERE order_id = $1
 
 func (q *Queries) GetItemsByOrderID(ctx context.Context, orderID int32) ([]Item, error) {
 	rows, err := q.query(ctx, q.getItemsByOrderIDStmt, getItemsByOrderID, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Item
+	for rows.Next() {
+		var i Item
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.UserName,
+			&i.OrderID,
+			&i.Quantity,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserItems = `-- name: GetUserItems :many
+SELECT id, user_id, user_name, order_id, quantity, name FROM items
+WHERE user_id = $1 AND order_id = $2
+`
+
+type GetUserItemsParams struct {
+	UserID  int32 `json:"user_id"`
+	OrderID int32 `json:"order_id"`
+}
+
+func (q *Queries) GetUserItems(ctx context.Context, arg GetUserItemsParams) ([]Item, error) {
+	rows, err := q.query(ctx, q.getUserItemsStmt, getUserItems, arg.UserID, arg.OrderID)
 	if err != nil {
 		return nil, err
 	}

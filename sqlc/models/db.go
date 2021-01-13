@@ -34,6 +34,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.deactivateOrderStmt, err = db.PrepareContext(ctx, deactivateOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query DeactivateOrder: %w", err)
 	}
+	if q.deleteItemByUserStmt, err = db.PrepareContext(ctx, deleteItemByUser); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteItemByUser: %w", err)
+	}
 	if q.getActiveOrderStmt, err = db.PrepareContext(ctx, getActiveOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query GetActiveOrder: %w", err)
 	}
@@ -45,6 +48,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.getOrderByIDStmt, err = db.PrepareContext(ctx, getOrderByID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetOrderByID: %w", err)
+	}
+	if q.getUserItemsStmt, err = db.PrepareContext(ctx, getUserItems); err != nil {
+		return nil, fmt.Errorf("error preparing query GetUserItems: %w", err)
 	}
 	if q.updateItemQuantityStmt, err = db.PrepareContext(ctx, updateItemQuantity); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateItemQuantity: %w", err)
@@ -74,6 +80,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing deactivateOrderStmt: %w", cerr)
 		}
 	}
+	if q.deleteItemByUserStmt != nil {
+		if cerr := q.deleteItemByUserStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteItemByUserStmt: %w", cerr)
+		}
+	}
 	if q.getActiveOrderStmt != nil {
 		if cerr := q.getActiveOrderStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getActiveOrderStmt: %w", cerr)
@@ -92,6 +103,11 @@ func (q *Queries) Close() error {
 	if q.getOrderByIDStmt != nil {
 		if cerr := q.getOrderByIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getOrderByIDStmt: %w", cerr)
+		}
+	}
+	if q.getUserItemsStmt != nil {
+		if cerr := q.getUserItemsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getUserItemsStmt: %w", cerr)
 		}
 	}
 	if q.updateItemQuantityStmt != nil {
@@ -142,10 +158,12 @@ type Queries struct {
 	createItemStmt         *sql.Stmt
 	createOrderStmt        *sql.Stmt
 	deactivateOrderStmt    *sql.Stmt
+	deleteItemByUserStmt   *sql.Stmt
 	getActiveOrderStmt     *sql.Stmt
 	getItemStmt            *sql.Stmt
 	getItemsByOrderIDStmt  *sql.Stmt
 	getOrderByIDStmt       *sql.Stmt
+	getUserItemsStmt       *sql.Stmt
 	updateItemQuantityStmt *sql.Stmt
 }
 
@@ -157,10 +175,12 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		createItemStmt:         q.createItemStmt,
 		createOrderStmt:        q.createOrderStmt,
 		deactivateOrderStmt:    q.deactivateOrderStmt,
+		deleteItemByUserStmt:   q.deleteItemByUserStmt,
 		getActiveOrderStmt:     q.getActiveOrderStmt,
 		getItemStmt:            q.getItemStmt,
 		getItemsByOrderIDStmt:  q.getItemsByOrderIDStmt,
 		getOrderByIDStmt:       q.getOrderByIDStmt,
+		getUserItemsStmt:       q.getUserItemsStmt,
 		updateItemQuantityStmt: q.updateItemQuantityStmt,
 	}
 }
