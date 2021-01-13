@@ -20,10 +20,10 @@ func New(token string) (*Bot, error) {
 }
 
 // SendMessage text
-func (bot *Bot) SendMessage(chatID int64, formatMarkdown bool, text string) {
+func (bot *Bot) SendMessage(chatID int64, formatHTML bool, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
-	if formatMarkdown {
-		msg.ParseMode = tgbotapi.ModeMarkdownV2
+	if formatHTML {
+		msg.ParseMode = tgbotapi.ModeHTML
 	}
 	msg.DisableWebPagePreview = true
 	bot.BotAPI.Send(msg)
@@ -33,5 +33,17 @@ func (bot *Bot) SendMessage(chatID int64, formatMarkdown bool, text string) {
 func (bot *Bot) SendInlineKeyboardMessage(chatID int64, text string, keyboard tgbotapi.InlineKeyboardMarkup) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = keyboard
+	bot.BotAPI.Send(msg)
+}
+
+// EditMessage text
+func (bot *Bot) EditMessage(chatID int64, messageID int, text string) {
+	msg := tgbotapi.EditMessageTextConfig{
+		BaseEdit: tgbotapi.BaseEdit{
+			ChatID:    chatID,
+			MessageID: messageID,
+		},
+		Text: text,
+	}
 	bot.BotAPI.Send(msg)
 }

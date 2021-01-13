@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"strings"
+	"time"
 )
 
 // ContextKey is the unique key that represents a context value
@@ -37,4 +40,29 @@ func respond(w http.ResponseWriter, data map[string]interface{}) {
 func respondWithStatus(w http.ResponseWriter, statusCode int, data map[string]interface{}) {
 	w.WriteHeader(statusCode)
 	respond(w, data)
+}
+
+func escapeString(str string) string {
+	now := time.Now()
+	str = strings.ReplaceAll(str, "\\", "\\\\")
+	str = strings.ReplaceAll(str, "`", "\\`")
+	str = strings.ReplaceAll(str, "*", "\\*")
+	str = strings.ReplaceAll(str, "_", "\\_")
+	str = strings.ReplaceAll(str, "{", "\\{")
+	str = strings.ReplaceAll(str, "}", "\\}")
+	str = strings.ReplaceAll(str, "[", "\\[")
+	str = strings.ReplaceAll(str, "]", "\\]")
+	str = strings.ReplaceAll(str, "(", "\\(")
+	str = strings.ReplaceAll(str, ")", "\\)")
+	str = strings.ReplaceAll(str, "#", "\\#")
+	str = strings.ReplaceAll(str, "+", "\\+")
+	str = strings.ReplaceAll(str, "-", "\\-")
+	str = strings.ReplaceAll(str, ".", "\\.")
+	str = strings.ReplaceAll(str, "!", "\\!")
+
+	str = strings.ReplaceAll(str, "&", "&amp;")
+	str = strings.ReplaceAll(str, "<", "&lt;")
+	str = strings.ReplaceAll(str, ">", "&gt;")
+	log.Println(time.Now().Sub(now).Milliseconds())
+	return str
 }

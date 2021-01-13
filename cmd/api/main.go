@@ -59,6 +59,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to initialise bot: %v", err)
 	}
+	bot.BotAPI.Debug = true
 
 	enqeuer := work.NewEnqueuer(cfg.RedisNamespace, redisPool)
 	pool := work.NewWorkerPool(handlers.Handlers{}, 10, cfg.RedisNamespace, redisPool)
