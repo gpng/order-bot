@@ -26,6 +26,11 @@ FROM scratch
 COPY --from=0 /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=0 /etc/passwd /etc/passwd
 
+# Timezones
+COPY --from=0 /usr/local/go/lib/time/zoneinfo.zip /
+ENV TZ=Asia/Singapore
+ENV ZONEINFO=/zoneinfo.zip
+
 # Copy our static executable.
 COPY --from=0 /app/bin/application /app/application
 # Copy production .env
