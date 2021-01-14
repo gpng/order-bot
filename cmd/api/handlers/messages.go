@@ -5,9 +5,9 @@ import "fmt"
 // messages
 const (
 	MsgError                      = "Oops, something went wrong"
-	MsgTakeOrder                  = "Create new order collection like /neworder 15:30 SoGood Bakery"
+	MsgTakeOrder                  = "Create new order collection like /neworder 15:30 Coffeeshop Kopi"
 	MsgCancelOrder                = "Use /canceltakeorders to cancel the current active take order"
-	MsgOrder                      = "Add to the order like /order 2 chicken pie"
+	MsgOrder                      = "Add to the order like /order 2 kopi o kosong"
 	MsgNewTakeOrderInvalidFormat  = "Invalid format! " + MsgTakeOrder
 	MsgNewTakeOrderInvalidTime    = "Invalid time! " + MsgTakeOrder
 	MsgCancelTakeOrders           = "Active take orders cancelled"
@@ -17,7 +17,7 @@ const (
 	MsgNoOrders                   = "You have no current orders"
 	MsgSelectDeleteOrder          = "Select order item to delete"
 	MsgInvalidItem                = "Invalid Item"
-	MsgCanceledDeleteOrderRequest = "Canceled delete order request"
+	MsgCanceledDeleteOrderRequest = "Canceled cancel order request"
 )
 
 // MsgNewTakeOrderExistingOrder message
