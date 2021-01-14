@@ -5,7 +5,11 @@ CREATE TABLE orders (
   chat_id INT NOT NULL,
   title TEXT NOT NULL,
   expiry TIMESTAMP NOT NULL,
-  active BOOLEAN NOT NULL DEFAULT TRUE
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  reminder_run_at BIGINT,
+  reminder_id TEXT,
+  expiry_run_at BIGINT,
+  expiry_id TEXT  
 );
 
 -- +goose Down

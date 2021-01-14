@@ -5,25 +5,39 @@ package models
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
 
-const cancelOrder = `-- name: CancelOrder :exec
+const cancelOrder = `-- name: CancelOrder :one
 UPDATE orders
 SET active = FALSE
 WHERE chat_id = $1
 AND active = TRUE
+RETURNING id, chat_id, title, expiry, active, reminder_run_at, reminder_id, expiry_run_at, expiry_id
 `
 
-func (q *Queries) CancelOrder(ctx context.Context, chatID int32) error {
-	_, err := q.exec(ctx, q.cancelOrderStmt, cancelOrder, chatID)
-	return err
+func (q *Queries) CancelOrder(ctx context.Context, chatID int32) (Order, error) {
+	row := q.queryRow(ctx, q.cancelOrderStmt, cancelOrder, chatID)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.Title,
+		&i.Expiry,
+		&i.Active,
+		&i.ReminderRunAt,
+		&i.ReminderID,
+		&i.ExpiryRunAt,
+		&i.ExpiryID,
+	)
+	return i, err
 }
 
 const createOrder = `-- name: CreateOrder :one
 INSERT INTO orders (chat_id, title, expiry)
 VALUES ($1, $2, $3)
-RETURNING id, chat_id, title, expiry, active
+RETURNING id, chat_id, title, expiry, active, reminder_run_at, reminder_id, expiry_run_at, expiry_id
 `
 
 type CreateOrderParams struct {
@@ -41,6 +55,10 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		&i.Title,
 		&i.Expiry,
 		&i.Active,
+		&i.ReminderRunAt,
+		&i.ReminderID,
+		&i.ExpiryRunAt,
+		&i.ExpiryID,
 	)
 	return i, err
 }
@@ -57,7 +75,7 @@ func (q *Queries) DeactivateOrder(ctx context.Context, id int32) error {
 }
 
 const getActiveOrder = `-- name: GetActiveOrder :one
-SELECT id, chat_id, title, expiry, active FROM orders
+SELECT id, chat_id, title, expiry, active, reminder_run_at, reminder_id, expiry_run_at, expiry_id FROM orders
 WHERE chat_id = $1
 AND expiry > $2
 AND active = TRUE
@@ -77,12 +95,16 @@ func (q *Queries) GetActiveOrder(ctx context.Context, arg GetActiveOrderParams) 
 		&i.Title,
 		&i.Expiry,
 		&i.Active,
+		&i.ReminderRunAt,
+		&i.ReminderID,
+		&i.ExpiryRunAt,
+		&i.ExpiryID,
 	)
 	return i, err
 }
 
 const getOrderByID = `-- name: GetOrderByID :one
-SELECT id, chat_id, title, expiry, active FROM orders
+SELECT id, chat_id, title, expiry, active, reminder_run_at, reminder_id, expiry_run_at, expiry_id FROM orders
 WHERE id = $1
 `
 
@@ -95,6 +117,44 @@ func (q *Queries) GetOrderByID(ctx context.Context, id int32) (Order, error) {
 		&i.Title,
 		&i.Expiry,
 		&i.Active,
+		&i.ReminderRunAt,
+		&i.ReminderID,
+		&i.ExpiryRunAt,
+		&i.ExpiryID,
 	)
 	return i, err
+}
+
+const updateExpiry = `-- name: UpdateExpiry :exec
+UPDATE orders
+SET expiry_run_at = $2, expiry_id = $3
+WHERE id = $1
+`
+
+type UpdateExpiryParams struct {
+	ID          int32          `json:"id"`
+	ExpiryRunAt sql.NullInt64  `json:"expiry_run_at"`
+	ExpiryID    sql.NullString `json:"expiry_id"`
+}
+
+func (q *Queries) UpdateExpiry(ctx context.Context, arg UpdateExpiryParams) error {
+	_, err := q.exec(ctx, q.updateExpiryStmt, updateExpiry, arg.ID, arg.ExpiryRunAt, arg.ExpiryID)
+	return err
+}
+
+const updateReminder = `-- name: UpdateReminder :exec
+UPDATE orders
+SET reminder_run_at = $2, reminder_id = $3
+WHERE id = $1
+`
+
+type UpdateReminderParams struct {
+	ID            int32          `json:"id"`
+	ReminderRunAt sql.NullInt64  `json:"reminder_run_at"`
+	ReminderID    sql.NullString `json:"reminder_id"`
+}
+
+func (q *Queries) UpdateReminder(ctx context.Context, arg UpdateReminderParams) error {
+	_, err := q.exec(ctx, q.updateReminderStmt, updateReminder, arg.ID, arg.ReminderRunAt, arg.ReminderID)
+	return err
 }

@@ -62,6 +62,7 @@ func main() {
 	// bot.BotAPI.Debug = true
 
 	enqeuer := work.NewEnqueuer(cfg.RedisNamespace, redisPool)
+	workClient := work.NewClient(cfg.RedisNamespace, redisPool)
 	pool := work.NewWorkerPool(handlers.Handlers{}, 10, cfg.RedisNamespace, redisPool)
 
 	pool.Middleware(func(c *handlers.Handlers, job *work.Job, next work.NextMiddlewareFunc) error {
@@ -70,6 +71,7 @@ func main() {
 		c.DB = db
 		c.Repo = repo
 		c.Bot = bot
+		c.WorkClient = workClient
 		return next()
 	})
 
@@ -78,7 +80,7 @@ func main() {
 		MaxFails:       3,
 	}, (*handlers.Handlers).JobNotifyExpiry)
 
-	h := handlers.New(cfg.BotToken, l, db, repo, bot, enqeuer)
+	h := handlers.New(cfg.BotToken, l, db, repo, bot, enqeuer, workClient)
 
 	// initialise main router with basic middlewares, cors settings etc
 	router := mainRouter()
@@ -87,7 +89,7 @@ func main() {
 
 	log.Println("starting worker pool...")
 	pool.Start()
-	// defer pool.Stop()
+	defer pool.Stop()
 
 	if err != nil {
 		log.Printf("err: %v\n", err)

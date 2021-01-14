@@ -9,12 +9,13 @@ import (
 
 // Handlers struct
 type Handlers struct {
-	BotToken string
-	Logger *zap.Logger
-	DB     models.DBTX
-	Repo   models.Querier
-	Bot    *telegram.Bot
-	Queue  *work.Enqueuer
+	BotToken   string
+	Logger     *zap.Logger
+	DB         models.DBTX
+	Repo       models.Querier
+	Bot        *telegram.Bot
+	Queue      *work.Enqueuer
+	WorkClient *work.Client
 }
 
 // New service
@@ -25,8 +26,9 @@ func New(
 	repo models.Querier,
 	bot *telegram.Bot,
 	queue *work.Enqueuer,
+	workClient *work.Client,
 ) *Handlers {
-	return &Handlers{botToken, logger, db, repo, bot, queue}
+	return &Handlers{botToken, logger, db, repo, bot, queue, workClient}
 }
 
 // JobName are job names

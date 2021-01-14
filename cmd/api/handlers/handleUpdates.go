@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -52,10 +53,10 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 
 			var err error
 			switch strings.ToLower(split[0]) {
-			case "/takeorders", "/takeorder":
+			case "/takeorders", "/takeorder", "/neworder", "/neworders":
 				err = h.handleNewOrder(chatID, text)
 				break
-			case "/canceltakeorder", "/canceltakeorders":
+			case "/endorders", "/endorder", "/endtakeorders", "/endtakeorder":
 				err = h.handleCancelTakeOrder(chatID)
 				break
 			case "/order":
@@ -74,14 +75,40 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 }
 
 func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
-	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/canceltakeorder"))
+	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/endorders"))
 
-	err := h.Repo.CancelOrder(context.Background(), int32(chatID))
+	order, err := h.Repo.CancelOrder(context.Background(), int32(chatID))
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			h.Bot.SendMessage(chatID, false, MsgNoActiveOrders)
+			return nil
+		}
 		l.Error("error cancelling active orders", zap.Error(err))
-		return nil
+		return err
 	}
 
+	if order.ReminderRunAt.Valid && order.ReminderID.Valid {
+		err = h.WorkClient.DeleteScheduledJob(order.ReminderRunAt.Int64, order.ReminderID.String)
+		log.Printf("err: %v\n", err)
+		if err != nil && !errors.Is(err, work.ErrNotDeleted) {
+			l.Error("error deleteing reminder job", zap.Error(err))
+			return err
+		}
+	}
+	if order.ExpiryRunAt.Valid && order.ExpiryID.Valid {
+		err = h.WorkClient.DeleteScheduledJob(order.ExpiryRunAt.Int64, order.ExpiryID.String)
+		log.Printf("err: %v\n", err)
+		if err != nil && !errors.Is(err, work.ErrNotDeleted) {
+			l.Error("error deleteing expiry job", zap.Error(err))
+			return err
+		}
+	}
+
+	err = h.sendOverview(l, order, false)
+	if err != nil {
+		l.Error("error sennding overview", zap.Error(err))
+		return err
+	}
 	h.Bot.SendMessage(chatID, false, MsgCancelTakeOrders)
 
 	return nil
@@ -165,7 +192,7 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 	diff := expiryTime.Sub(now).Seconds()
 
 	if diff > 600 { // only notify 5 minutes before if more than 10 minutes to go
-		_, err = h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff-300), work.Q{
+		scheduledJob, err := h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff-300), work.Q{
 			jobArgOrderID:   int64(order.ID),
 			jobArgPreExpiry: true,
 		})
@@ -173,14 +200,33 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 			l.Error("error scheduling job", zap.Error(err))
 			return err
 		}
+		err = h.Repo.UpdateReminder(context.Background(), models.UpdateReminderParams{
+			ID:            order.ID,
+			ReminderRunAt: sql.NullInt64{Int64: scheduledJob.EnqueuedAt, Valid: true},
+			ReminderID:    sql.NullString{String: scheduledJob.ID, Valid: true},
+		})
+		if err != nil {
+			l.Error("error updating reminder details", zap.Error(err))
+			return err
+		}
 	}
 
-	_, err = h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff), work.Q{
+	scheduledJob, err := h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff), work.Q{
 		jobArgOrderID:   int64(order.ID),
 		jobArgPreExpiry: false,
 	})
+
 	if err != nil {
 		l.Error("error scheduling job", zap.Error(err))
+		return err
+	}
+	err = h.Repo.UpdateExpiry(context.Background(), models.UpdateExpiryParams{
+		ID:          order.ID,
+		ExpiryRunAt: sql.NullInt64{Int64: scheduledJob.EnqueuedAt, Valid: true},
+		ExpiryID:    sql.NullString{String: scheduledJob.ID, Valid: true},
+	})
+	if err != nil {
+		l.Error("error updating reminder details", zap.Error(err))
 		return err
 	}
 
@@ -189,7 +235,13 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 		message += " tomorrow"
 	}
 
-	h.Bot.SendMessage(chatID, false, message)
+	fullMessage := fmt.Sprintf(`%s
+	
+%s
+%s
+`, message, MsgEndTakeOrders, MsgOrder)
+
+	h.Bot.SendMessage(chatID, false, fullMessage)
 
 	return nil
 }
@@ -319,10 +371,11 @@ func (h *Handlers) sendOverview(l *zap.Logger, order models.Order, isPreExpiry b
 %s
 
 %s
-
 <b>Consolidated</b>
 %s
-`, title, expiry, itemsText, allItemsText)
+%s
+%s
+`, title, expiry, itemsText, allItemsText, MsgEndTakeOrders, MsgCancelOrder)
 
 	h.Bot.SendMessage(int64(order.ChatID), true, message)
 
@@ -334,7 +387,7 @@ func getLocation() (*time.Location, error) {
 }
 
 func (h *Handlers) handleCancelOrder(chatID int64, user models.User) error {
-	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/deleteorder"))
+	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/cancelorder"))
 
 	location, err := getLocation()
 	if err != nil {
@@ -372,7 +425,7 @@ func (h *Handlers) handleCancelOrder(chatID int64, user models.User) error {
 	rows := make([][]tgbotapi.InlineKeyboardButton, len(items))
 	for i, item := range items {
 		rows[i] = tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(item.Name, "/delete "+strconv.Itoa(int(item.ID))),
+			tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%d x %s", item.Quantity, item.Name), "/delete "+strconv.Itoa(int(item.ID))),
 		)
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
@@ -441,9 +494,7 @@ func (h *Handlers) handleDeleteItem(cq models.CallbackQuery) error {
 
 	h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, MsgDeletedOrder(int(item.Quantity), item.Name))
 
-	h.sendOverview(l, order, false)
-
-	return nil
+	return h.sendOverview(l, order, false)
 }
 
 func (h *Handlers) handleCancelDeleteOrder(cq models.CallbackQuery) error {

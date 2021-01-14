@@ -52,8 +52,14 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getUserItemsStmt, err = db.PrepareContext(ctx, getUserItems); err != nil {
 		return nil, fmt.Errorf("error preparing query GetUserItems: %w", err)
 	}
+	if q.updateExpiryStmt, err = db.PrepareContext(ctx, updateExpiry); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateExpiry: %w", err)
+	}
 	if q.updateItemQuantityStmt, err = db.PrepareContext(ctx, updateItemQuantity); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateItemQuantity: %w", err)
+	}
+	if q.updateReminderStmt, err = db.PrepareContext(ctx, updateReminder); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateReminder: %w", err)
 	}
 	return &q, nil
 }
@@ -110,9 +116,19 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getUserItemsStmt: %w", cerr)
 		}
 	}
+	if q.updateExpiryStmt != nil {
+		if cerr := q.updateExpiryStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateExpiryStmt: %w", cerr)
+		}
+	}
 	if q.updateItemQuantityStmt != nil {
 		if cerr := q.updateItemQuantityStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updateItemQuantityStmt: %w", cerr)
+		}
+	}
+	if q.updateReminderStmt != nil {
+		if cerr := q.updateReminderStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateReminderStmt: %w", cerr)
 		}
 	}
 	return err
@@ -164,7 +180,9 @@ type Queries struct {
 	getItemsByOrderIDStmt  *sql.Stmt
 	getOrderByIDStmt       *sql.Stmt
 	getUserItemsStmt       *sql.Stmt
+	updateExpiryStmt       *sql.Stmt
 	updateItemQuantityStmt *sql.Stmt
+	updateReminderStmt     *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
@@ -181,6 +199,8 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getItemsByOrderIDStmt:  q.getItemsByOrderIDStmt,
 		getOrderByIDStmt:       q.getOrderByIDStmt,
 		getUserItemsStmt:       q.getUserItemsStmt,
+		updateExpiryStmt:       q.updateExpiryStmt,
 		updateItemQuantityStmt: q.updateItemQuantityStmt,
+		updateReminderStmt:     q.updateReminderStmt,
 	}
 }

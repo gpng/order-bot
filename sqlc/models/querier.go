@@ -7,7 +7,7 @@ import (
 )
 
 type Querier interface {
-	CancelOrder(ctx context.Context, chatID int32) error
+	CancelOrder(ctx context.Context, chatID int32) (Order, error)
 	CreateItem(ctx context.Context, arg CreateItemParams) (Item, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	DeactivateOrder(ctx context.Context, id int32) error
@@ -17,7 +17,9 @@ type Querier interface {
 	GetItemsByOrderID(ctx context.Context, orderID int32) ([]Item, error)
 	GetOrderByID(ctx context.Context, id int32) (Order, error)
 	GetUserItems(ctx context.Context, arg GetUserItemsParams) ([]Item, error)
+	UpdateExpiry(ctx context.Context, arg UpdateExpiryParams) error
 	UpdateItemQuantity(ctx context.Context, arg UpdateItemQuantityParams) (Item, error)
+	UpdateReminder(ctx context.Context, arg UpdateReminderParams) error
 }
 
 var _ Querier = (*Queries)(nil)
