@@ -78,6 +78,7 @@ func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
 	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/endorders"))
 
 	order, err := h.Repo.CancelOrder(context.Background(), int32(chatID))
+	log.Printf("order, err: %v, %v\n", order, err)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			h.Bot.SendMessage(chatID, false, MsgNoActiveOrders)

@@ -25,12 +25,6 @@ func (h *Handlers) JobNotifyExpiry(job *work.Job) error {
 		return err
 	}
 
-	err = h.Repo.DeactivateOrder(context.Background(), orderID)
-	if err != nil {
-		l.Error("failed to deactivate order", zap.Error(err))
-		return err
-	}
-
 	err = h.sendOverview(l, order, preExpiry)
 	if err != nil {
 		l.Error("failed to send notification", zap.Error(err))
@@ -38,6 +32,12 @@ func (h *Handlers) JobNotifyExpiry(job *work.Job) error {
 	}
 	if !preExpiry {
 		h.Bot.SendMessage(int64(order.ChatID), false, MsgCancelTakeOrders)
+
+		err = h.Repo.DeactivateOrder(context.Background(), orderID)
+		if err != nil {
+			l.Error("failed to deactivate order", zap.Error(err))
+			return err
+		}
 	}
 
 	return nil
