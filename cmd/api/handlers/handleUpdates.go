@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -78,8 +79,29 @@ func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
 
 	order, err := h.Repo.CancelOrder(context.Background(), int32(chatID))
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			h.Bot.SendMessage(chatID, false, MsgNoActiveOrders)
+			return nil
+		}
 		l.Error("error cancelling active orders", zap.Error(err))
-		return nil
+		return err
+	}
+
+	if order.ReminderRunAt.Valid && order.ReminderID.Valid {
+		err = h.WorkClient.DeleteScheduledJob(order.ReminderRunAt.Int64, order.ReminderID.String)
+		log.Printf("err: %v\n", err)
+		if err != nil && !errors.Is(err, work.ErrNotDeleted) {
+			l.Error("error deleteing reminder job", zap.Error(err))
+			return err
+		}
+	}
+	if order.ExpiryRunAt.Valid && order.ExpiryID.Valid {
+		err = h.WorkClient.DeleteScheduledJob(order.ExpiryRunAt.Int64, order.ExpiryID.String)
+		log.Printf("err: %v\n", err)
+		if err != nil && !errors.Is(err, work.ErrNotDeleted) {
+			l.Error("error deleteing expiry job", zap.Error(err))
+			return err
+		}
 	}
 
 	err = h.sendOverview(l, order, false)
@@ -170,7 +192,7 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 	diff := expiryTime.Sub(now).Seconds()
 
 	if diff > 600 { // only notify 5 minutes before if more than 10 minutes to go
-		_, err = h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff-300), work.Q{
+		scheduledJob, err := h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff-300), work.Q{
 			jobArgOrderID:   int64(order.ID),
 			jobArgPreExpiry: true,
 		})
@@ -178,14 +200,33 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 			l.Error("error scheduling job", zap.Error(err))
 			return err
 		}
+		err = h.Repo.UpdateReminder(context.Background(), models.UpdateReminderParams{
+			ID:            order.ID,
+			ReminderRunAt: sql.NullInt64{Int64: scheduledJob.EnqueuedAt, Valid: true},
+			ReminderID:    sql.NullString{String: scheduledJob.ID, Valid: true},
+		})
+		if err != nil {
+			l.Error("error updating reminder details", zap.Error(err))
+			return err
+		}
 	}
 
-	_, err = h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff), work.Q{
+	scheduledJob, err := h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff), work.Q{
 		jobArgOrderID:   int64(order.ID),
 		jobArgPreExpiry: false,
 	})
+
 	if err != nil {
 		l.Error("error scheduling job", zap.Error(err))
+		return err
+	}
+	err = h.Repo.UpdateExpiry(context.Background(), models.UpdateExpiryParams{
+		ID:          order.ID,
+		ExpiryRunAt: sql.NullInt64{Int64: scheduledJob.EnqueuedAt, Valid: true},
+		ExpiryID:    sql.NullString{String: scheduledJob.ID, Valid: true},
+	})
+	if err != nil {
+		l.Error("error updating reminder details", zap.Error(err))
 		return err
 	}
 

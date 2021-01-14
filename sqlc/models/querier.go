@@ -17,7 +17,9 @@ type Querier interface {
 	GetItemsByOrderID(ctx context.Context, orderID int32) ([]Item, error)
 	GetOrderByID(ctx context.Context, id int32) (Order, error)
 	GetUserItems(ctx context.Context, arg GetUserItemsParams) ([]Item, error)
+	UpdateExpiry(ctx context.Context, arg UpdateExpiryParams) error
 	UpdateItemQuantity(ctx context.Context, arg UpdateItemQuantityParams) (Item, error)
+	UpdateReminder(ctx context.Context, arg UpdateReminderParams) error
 }
 
 var _ Querier = (*Queries)(nil)

@@ -24,3 +24,13 @@ WHERE id = $1;
 UPDATE orders
 SET active = FALSE
 WHERE id = $1;
+
+-- name: UpdateReminder :exec
+UPDATE orders
+SET reminder_run_at = $2, reminder_id = $3
+WHERE id = $1;
+
+-- name: UpdateExpiry :exec
+UPDATE orders
+SET expiry_run_at = $2, expiry_id = $3
+WHERE id = $1;
