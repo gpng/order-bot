@@ -8,16 +8,25 @@ import (
 	"time"
 )
 
-const cancelOrder = `-- name: CancelOrder :exec
+const cancelOrder = `-- name: CancelOrder :one
 UPDATE orders
 SET active = FALSE
 WHERE chat_id = $1
 AND active = TRUE
+RETURNING id, chat_id, title, expiry, active
 `
 
-func (q *Queries) CancelOrder(ctx context.Context, chatID int32) error {
-	_, err := q.exec(ctx, q.cancelOrderStmt, cancelOrder, chatID)
-	return err
+func (q *Queries) CancelOrder(ctx context.Context, chatID int32) (Order, error) {
+	row := q.queryRow(ctx, q.cancelOrderStmt, cancelOrder, chatID)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.Title,
+		&i.Expiry,
+		&i.Active,
+	)
+	return i, err
 }
 
 const createOrder = `-- name: CreateOrder :one

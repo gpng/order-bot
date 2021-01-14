@@ -52,10 +52,10 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 
 			var err error
 			switch strings.ToLower(split[0]) {
-			case "/takeorders", "/takeorder":
+			case "/takeorders", "/takeorder", "/neworder", "/neworders":
 				err = h.handleNewOrder(chatID, text)
 				break
-			case "/canceltakeorder", "/canceltakeorders":
+			case "/endorders", "/endorder", "/endtakeorders", "/endtakeorder":
 				err = h.handleCancelTakeOrder(chatID)
 				break
 			case "/order":
@@ -74,14 +74,19 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 }
 
 func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
-	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/canceltakeorder"))
+	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/endorders"))
 
-	err := h.Repo.CancelOrder(context.Background(), int32(chatID))
+	order, err := h.Repo.CancelOrder(context.Background(), int32(chatID))
 	if err != nil {
 		l.Error("error cancelling active orders", zap.Error(err))
 		return nil
 	}
 
+	err = h.sendOverview(l, order, false)
+	if err != nil {
+		l.Error("error sennding overview", zap.Error(err))
+		return err
+	}
 	h.Bot.SendMessage(chatID, false, MsgCancelTakeOrders)
 
 	return nil
@@ -189,7 +194,13 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 		message += " tomorrow"
 	}
 
-	h.Bot.SendMessage(chatID, false, message)
+	fullMessage := fmt.Sprintf(`%s
+	
+%s
+%s
+`, message, MsgEndTakeOrders, MsgOrder)
+
+	h.Bot.SendMessage(chatID, false, fullMessage)
 
 	return nil
 }
@@ -319,10 +330,11 @@ func (h *Handlers) sendOverview(l *zap.Logger, order models.Order, isPreExpiry b
 %s
 
 %s
-
 <b>Consolidated</b>
 %s
-`, title, expiry, itemsText, allItemsText)
+%s
+%s
+`, title, expiry, itemsText, allItemsText, MsgEndTakeOrders, MsgCancelOrder)
 
 	h.Bot.SendMessage(int64(order.ChatID), true, message)
 
@@ -334,7 +346,7 @@ func getLocation() (*time.Location, error) {
 }
 
 func (h *Handlers) handleCancelOrder(chatID int64, user models.User) error {
-	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/deleteorder"))
+	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/cancelorder"))
 
 	location, err := getLocation()
 	if err != nil {
@@ -372,7 +384,7 @@ func (h *Handlers) handleCancelOrder(chatID int64, user models.User) error {
 	rows := make([][]tgbotapi.InlineKeyboardButton, len(items))
 	for i, item := range items {
 		rows[i] = tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(item.Name, "/delete "+strconv.Itoa(int(item.ID))),
+			tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%d x %s", item.Quantity, item.Name), "/delete "+strconv.Itoa(int(item.ID))),
 		)
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
@@ -441,9 +453,7 @@ func (h *Handlers) handleDeleteItem(cq models.CallbackQuery) error {
 
 	h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, MsgDeletedOrder(int(item.Quantity), item.Name))
 
-	h.sendOverview(l, order, false)
-
-	return nil
+	return h.sendOverview(l, order, false)
 }
 
 func (h *Handlers) handleCancelDeleteOrder(cq models.CallbackQuery) error {

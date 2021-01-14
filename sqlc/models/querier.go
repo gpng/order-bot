@@ -7,7 +7,7 @@ import (
 )
 
 type Querier interface {
-	CancelOrder(ctx context.Context, chatID int32) error
+	CancelOrder(ctx context.Context, chatID int32) (Order, error)
 	CreateItem(ctx context.Context, arg CreateItemParams) (Item, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	DeactivateOrder(ctx context.Context, id int32) error

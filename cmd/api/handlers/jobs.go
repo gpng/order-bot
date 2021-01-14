@@ -36,6 +36,9 @@ func (h *Handlers) JobNotifyExpiry(job *work.Job) error {
 		l.Error("failed to send notification", zap.Error(err))
 		return err
 	}
+	if !preExpiry {
+		h.Bot.SendMessage(int64(order.ChatID), false, MsgCancelTakeOrders)
+	}
 
 	return nil
 }

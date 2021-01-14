@@ -9,11 +9,12 @@ WHERE chat_id = $1
 AND expiry > $2
 AND active = TRUE;
 
--- name: CancelOrder :exec
+-- name: CancelOrder :one
 UPDATE orders
 SET active = FALSE
 WHERE chat_id = $1
-AND active = TRUE;
+AND active = TRUE
+RETURNING *;
 
 -- name: GetOrderByID :one
 SELECT * FROM orders
