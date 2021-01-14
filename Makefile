@@ -49,8 +49,8 @@ clean: down
 	$(DOCKERCMD) volume prune -f
 
 run-prod:
-	$(DOCKERCMD) build -t chanced-api-eb .
-	docker run -p 4000:5000 chanced-api-eb
+	$(DOCKERCMD) build -t order-bot-eb .
+	docker run -p 4000:5000 order-bot-eb
 
 gen-docs:
 	swag init -g $(MAIN_PATH)
