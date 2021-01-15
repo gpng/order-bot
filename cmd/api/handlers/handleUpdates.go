@@ -113,7 +113,7 @@ func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
 		err = h.WorkClient.DeleteScheduledJob(order.ReminderRunAt.Int64, order.ReminderID.String)
 		log.Printf("err: %v\n", err)
 		if err != nil && !errors.Is(err, work.ErrNotDeleted) {
-			l.Error("error deleteing reminder job", zap.Error(err))
+			l.Error("error deleting reminder job", zap.Error(err))
 			return err
 		}
 	}
@@ -121,7 +121,7 @@ func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
 		err = h.WorkClient.DeleteScheduledJob(order.ExpiryRunAt.Int64, order.ExpiryID.String)
 		log.Printf("err: %v\n", err)
 		if err != nil && !errors.Is(err, work.ErrNotDeleted) {
-			l.Error("error deleteing expiry job", zap.Error(err))
+			l.Error("error deleting expiry job", zap.Error(err))
 			return err
 		}
 	}
