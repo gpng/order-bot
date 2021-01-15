@@ -23,6 +23,7 @@ import (
 func (h *Handlers) handleUpdates() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		update := &models.TelegramUpdate{}
+
 		if err := json.NewDecoder(r.Body).Decode(update); err != nil {
 			h.Logger.Error("failed to decoding body", zap.Error(err))
 			return
@@ -53,6 +54,9 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 
 			var err error
 			switch strings.ToLower(split[0]) {
+			case "/start", "/help":
+				h.handleStart(chatID)
+				return
 			case "/takeorders", "/takeorder", "/neworder", "/neworders":
 				err = h.handleNewOrder(chatID, text)
 				break
@@ -72,6 +76,15 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 			}
 		}
 	}
+}
+
+func (h *Handlers) handleStart(chatID int64) {
+	h.Bot.SendMessage(chatID, false, fmt.Sprintf(`Use HelpMeBuyLehBot to collect group orders!
+
+%s
+%s
+%s
+`, MsgTakeOrders, MsgOrder, MsgEndTakeOrders))
 }
 
 func (h *Handlers) handleCancelTakeOrder(chatID int64) error {

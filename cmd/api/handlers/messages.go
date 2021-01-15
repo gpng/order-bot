@@ -5,13 +5,13 @@ import "fmt"
 // messages
 const (
 	MsgError                      = "Oops, something went wrong"
-	MsgTakeOrder                  = "Start taking orders using /takeorders 15:00 Coffeeshop Kopi"
+	MsgTakeOrders                 = "Start taking orders using /takeorders 15:00 Coffeeshop Kopi"
 	MsgEndTakeOrders              = "Use /endorders to stop taking orders"
 	MsgOrder                      = "Add orders using /order 2 kopi o kosong"
-	MsgNewTakeOrderInvalidFormat  = "Invalid format! " + MsgTakeOrder
-	MsgNewTakeOrderInvalidTime    = "Invalid time! " + MsgTakeOrder
+	MsgNewTakeOrderInvalidFormat  = "Invalid format! " + MsgTakeOrders
+	MsgNewTakeOrderInvalidTime    = "Invalid time! " + MsgTakeOrders
 	MsgCancelTakeOrders           = "Stopped taking orders"
-	MsgNoActiveOrders             = "No active orders! " + MsgTakeOrder
+	MsgNoActiveOrders             = "No active orders! " + MsgTakeOrders
 	MsgOrderInvalidFormat         = "Invalid order! " + MsgOrder
 	MsgOrderInvalidQuantity       = "Invalid quantity! " + MsgOrder
 	MsgNoOrders                   = "You have no current orders"
