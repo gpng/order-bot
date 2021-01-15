@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -99,7 +98,6 @@ func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
 	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/endorders"))
 
 	order, err := h.Repo.CancelOrder(context.Background(), int32(chatID))
-	log.Printf("order, err: %v, %v\n", order, err)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			h.Bot.SendMessage(chatID, false, MsgNoActiveOrders)
@@ -111,7 +109,6 @@ func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
 
 	if order.ReminderRunAt.Valid && order.ReminderID.Valid {
 		err = h.WorkClient.DeleteScheduledJob(order.ReminderRunAt.Int64, order.ReminderID.String)
-		log.Printf("err: %v\n", err)
 		if err != nil && !errors.Is(err, work.ErrNotDeleted) {
 			l.Error("error deleting reminder job", zap.Error(err))
 			return err
@@ -119,7 +116,6 @@ func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
 	}
 	if order.ExpiryRunAt.Valid && order.ExpiryID.Valid {
 		err = h.WorkClient.DeleteScheduledJob(order.ExpiryRunAt.Int64, order.ExpiryID.String)
-		log.Printf("err: %v\n", err)
 		if err != nil && !errors.Is(err, work.ErrNotDeleted) {
 			l.Error("error deleting expiry job", zap.Error(err))
 			return err
@@ -224,8 +220,8 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 		}
 		err = h.Repo.UpdateReminder(context.Background(), models.UpdateReminderParams{
 			ID:            order.ID,
-			ReminderRunAt: sql.NullInt64{Int64: scheduledJob.EnqueuedAt, Valid: true},
-			ReminderID:    sql.NullString{String: scheduledJob.ID, Valid: true},
+			ReminderRunAt: sql.NullInt64{Int64: scheduledJob.RunAt, Valid: true},
+			ReminderID:    sql.NullString{String: scheduledJob.Job.ID, Valid: true},
 		})
 		if err != nil {
 			l.Error("error updating reminder details", zap.Error(err))
@@ -244,8 +240,8 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 	}
 	err = h.Repo.UpdateExpiry(context.Background(), models.UpdateExpiryParams{
 		ID:          order.ID,
-		ExpiryRunAt: sql.NullInt64{Int64: scheduledJob.EnqueuedAt, Valid: true},
-		ExpiryID:    sql.NullString{String: scheduledJob.ID, Valid: true},
+		ExpiryRunAt: sql.NullInt64{Int64: scheduledJob.RunAt, Valid: true},
+		ExpiryID:    sql.NullString{String: scheduledJob.Job.ID, Valid: true},
 	})
 	if err != nil {
 		l.Error("error updating reminder details", zap.Error(err))
