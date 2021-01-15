@@ -29,6 +29,14 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 			return
 		}
 
+		if update.Message.GroupChatCreated {
+			h.handleStart(update.Message.Chat.ID)
+		}
+		if len(update.Message.NewChatMembers) > 0 {
+			h.handleNewChatMembers(update.Message.Chat.ID, update.Message.NewChatMembers)
+			return
+		}
+
 		if update.CallbackQuery != nil {
 			var err error
 			switch strings.ToLower(strings.Split(update.CallbackQuery.Data, " ")[0]) {
@@ -523,4 +531,19 @@ func (h *Handlers) handleCancelDeleteOrder(cq models.CallbackQuery) error {
 		h.Bot.BotAPI.Send(msg)
 	}
 	return nil
+}
+
+func (h *Handlers) handleNewChatMembers(chatID int64, newChatMembers []models.User) {
+	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("event", "new members"))
+
+	botID, err := strconv.Atoi(strings.Split(h.BotToken, ":")[0])
+	if err != nil {
+		l.Error("failed to get bot id from token", zap.Error(err))
+		return
+	}
+	for _, member := range newChatMembers {
+		if member.IsBot && member.ID == int64(botID) {
+			h.handleStart(chatID)
+		}
+	}
 }

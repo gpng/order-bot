@@ -14,25 +14,27 @@ type User struct {
 
 // Message model
 type Message struct {
-	MessageID int    `json:"message_id"`
-	Chat      Chat   `json:"chat"`
-	Text      string `json:"text"`
-	From      User   `json:"from"`
+	MessageID        int    `json:"message_id"`
+	Chat             Chat   `json:"chat"`
+	Text             string `json:"text"`
+	From             User   `json:"from"`
+	GroupChatCreated bool   `json:"group_chat_created"`
+	NewChatMembers   []User `json:"new_chat_members"`
 }
 
 // TelegramUpdate model
 type TelegramUpdate struct {
-	UpdateID int     `json:"update_id"`
-	Message  *Message `json:"message"`
+	UpdateID      int            `json:"update_id"`
+	Message       *Message       `json:"message"`
 	CallbackQuery *CallbackQuery `json:"callback_query"`
 }
 
 // CallbackQuery model
 type CallbackQuery struct {
-	ID string `json:"id"`
-	From User `json:"from"`
-	Data string `json:"data"`
-	Message *Message `json:"message"`
-	InlineMessageID string `json:"inline_message_id"`
-	ChatInstance string `json:"chat_instance"`
+	ID              string   `json:"id"`
+	From            User     `json:"from"`
+	Data            string   `json:"data"`
+	Message         *Message `json:"message"`
+	InlineMessageID string   `json:"inline_message_id"`
+	ChatInstance    string   `json:"chat_instance"`
 }
