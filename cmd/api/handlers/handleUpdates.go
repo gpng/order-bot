@@ -29,14 +29,6 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 			return
 		}
 
-		if update.Message.GroupChatCreated {
-			h.handleStart(update.Message.Chat.ID)
-		}
-		if len(update.Message.NewChatMembers) > 0 {
-			h.handleNewChatMembers(update.Message.Chat.ID, update.Message.NewChatMembers)
-			return
-		}
-
 		if update.CallbackQuery != nil {
 			var err error
 			switch strings.ToLower(strings.Split(update.CallbackQuery.Data, " ")[0]) {
@@ -56,6 +48,14 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 		}
 
 		if update.Message != nil {
+			if update.Message.GroupChatCreated {
+				h.handleStart(update.Message.Chat.ID)
+			}
+			if len(update.Message.NewChatMembers) > 0 {
+				h.handleNewChatMembers(update.Message.Chat.ID, update.Message.NewChatMembers)
+				return
+			}
+
 			chatID := update.Message.Chat.ID
 			text := update.Message.Text
 			split := strings.Split(text, " ")
