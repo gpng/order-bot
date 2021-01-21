@@ -292,18 +292,22 @@ func (h *Handlers) handlerOrder(chatID int64, text string, user models.User) err
 
 	split := strings.Split(text, " ")
 
-	if len(split) < 3 {
+	if len(split) < 2 {
 		h.Bot.SendMessage(chatID, false, MsgOrderInvalidFormat)
 		return nil
 	}
 
-	quantity, err := strconv.Atoi(split[1])
-	if err != nil || quantity <= 0 {
+	quantity, _ := strconv.Atoi(split[1])
+
+	var name string
+	if quantity < 0 {
 		h.Bot.SendMessage(chatID, false, MsgOrderInvalidQuantity)
 		return nil
+	} else if quantity > 0 {
+		name = strings.Join(split[2:], " ")
+	} else { // quantity == 0
+		name = strings.Join(split[1:], " ")
 	}
-
-	name := strings.Join(split[2:], " ")
 
 	item, err := h.Repo.GetItem(context.Background(), models.GetItemParams{
 		OrderID: order.ID,
