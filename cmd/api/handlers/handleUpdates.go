@@ -306,6 +306,7 @@ func (h *Handlers) handlerOrder(chatID int64, text string, user models.User) err
 	} else if quantity > 0 {
 		name = strings.Join(split[2:], " ")
 	} else { // quantity == 0
+		quantity = 1
 		name = strings.Join(split[1:], " ")
 	}
 
