@@ -6,7 +6,6 @@ package models
 import (
 	"context"
 	"database/sql"
-	"time"
 )
 
 const cancelOrder = `-- name: CancelOrder :one
@@ -41,9 +40,9 @@ RETURNING id, chat_id, title, expiry, active, reminder_run_at, reminder_id, expi
 `
 
 type CreateOrderParams struct {
-	ChatID int32     `json:"chat_id"`
-	Title  string    `json:"title"`
-	Expiry time.Time `json:"expiry"`
+	ChatID int32        `json:"chat_id"`
+	Title  string       `json:"title"`
+	Expiry sql.NullTime `json:"expiry"`
 }
 
 func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error) {
@@ -77,17 +76,11 @@ func (q *Queries) DeactivateOrder(ctx context.Context, id int32) error {
 const getActiveOrder = `-- name: GetActiveOrder :one
 SELECT id, chat_id, title, expiry, active, reminder_run_at, reminder_id, expiry_run_at, expiry_id FROM orders
 WHERE chat_id = $1
-AND expiry > $2
 AND active = TRUE
 `
 
-type GetActiveOrderParams struct {
-	ChatID int32     `json:"chat_id"`
-	Expiry time.Time `json:"expiry"`
-}
-
-func (q *Queries) GetActiveOrder(ctx context.Context, arg GetActiveOrderParams) (Order, error) {
-	row := q.queryRow(ctx, q.getActiveOrderStmt, getActiveOrder, arg.ChatID, arg.Expiry)
+func (q *Queries) GetActiveOrder(ctx context.Context, chatID int32) (Order, error) {
+	row := q.queryRow(ctx, q.getActiveOrderStmt, getActiveOrder, chatID)
 	var i Order
 	err := row.Scan(
 		&i.ID,

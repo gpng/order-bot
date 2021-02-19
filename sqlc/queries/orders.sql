@@ -6,7 +6,6 @@ RETURNING *;
 -- name: GetActiveOrder :one
 SELECT * FROM orders
 WHERE chat_id = $1
-AND expiry > $2
 AND active = TRUE;
 
 -- name: CancelOrder :one

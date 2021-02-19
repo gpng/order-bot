@@ -65,10 +65,10 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 				h.handleStart(chatID)
 				return
 			case "/takeorders", "/takeorder", "/neworder", "/neworders":
-				err = h.handleNewOrder(chatID, text)
+				err = h.handleTakeOrder(chatID, text)
 				break
 			case "/endorders", "/endorder", "/endtakeorders", "/endtakeorder":
-				err = h.handleCancelTakeOrder(chatID)
+				err = h.handleEndOrder(chatID)
 				break
 			case "/order":
 				err = h.handlerOrder(chatID, text, update.Message.From)
@@ -94,7 +94,7 @@ func (h *Handlers) handleStart(chatID int64) {
 `, MsgTakeOrders, MsgOrder, MsgEndTakeOrders))
 }
 
-func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
+func (h *Handlers) handleEndOrder(chatID int64) error {
 	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/endorders"))
 
 	order, err := h.Repo.CancelOrder(context.Background(), int32(chatID))
@@ -132,12 +132,12 @@ func (h *Handlers) handleCancelTakeOrder(chatID int64) error {
 	return nil
 }
 
-func (h *Handlers) handleNewOrder(chatID int64, text string) error {
+func (h *Handlers) handleTakeOrder(chatID int64, text string) error {
 	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/takeorders"))
 
 	split := strings.Split(text, " ")
 
-	if len(split) < 3 {
+	if len(split) < 2 {
 		h.Bot.SendMessage(chatID, false, MsgNewTakeOrderInvalidFormat)
 		return nil
 	}
@@ -150,8 +150,13 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 		return err
 	}
 	if !r.MatchString(expiry) {
-		h.Bot.SendMessage(chatID, false, MsgNewTakeOrderInvalidTime)
-		return nil
+		return h.saveTakeOrder(l,
+			chatID,
+			expiry,
+			sql.NullTime{Valid: false},
+			false,
+			escapeString(strings.Join(split[1:], " ")),
+		)
 	}
 
 	expirySplit := strings.Split(expiry, ":")
@@ -183,10 +188,20 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 		expiryTime = expiryTime.Add(time.Hour * 24)
 	}
 
-	activeOrder, err := h.Repo.GetActiveOrder(context.Background(), models.GetActiveOrderParams{
-		ChatID: int32(chatID),
-		Expiry: now,
-	})
+	return h.saveTakeOrder(l,
+		chatID,
+		expiry,
+		sql.NullTime{
+			Valid: true,
+			Time:  expiryTime,
+		},
+		isTomorrow,
+		title,
+	)
+}
+
+func (h *Handlers) saveTakeOrder(l *zap.Logger, chatID int64, expiry string, expiryTime sql.NullTime, isTomorrow bool, title string) error {
+	activeOrder, err := h.Repo.GetActiveOrder(context.Background(), int32(chatID))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		l.Error("error fetching active orders", zap.Error(err))
 		return err
@@ -206,22 +221,49 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 		return err
 	}
 
-	now = time.Now().In(location)
-	diff := expiryTime.Sub(now).Seconds()
+	if expiryTime.Valid {
+		location, err := getLocation()
+		if err != nil {
+			l.Error("error loading time location", zap.Error(err))
+			return nil
+		}
+		now := time.Now().In(location)
 
-	if diff > 600 { // only notify 5 minutes before if more than 10 minutes to go
-		scheduledJob, err := h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff-300), work.Q{
+		diff := expiryTime.Time.Sub(now).Seconds()
+
+		if diff > 600 { // only notify 5 minutes before if more than 10 minutes to go
+			scheduledJob, err := h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff-300), work.Q{
+				jobArgOrderID:   int64(order.ID),
+				jobArgPreExpiry: true,
+			})
+			if err != nil {
+				l.Error("error scheduling job", zap.Error(err))
+				return err
+			}
+			err = h.Repo.UpdateReminder(context.Background(), models.UpdateReminderParams{
+				ID:            order.ID,
+				ReminderRunAt: sql.NullInt64{Int64: scheduledJob.RunAt, Valid: true},
+				ReminderID:    sql.NullString{String: scheduledJob.Job.ID, Valid: true},
+			})
+			if err != nil {
+				l.Error("error updating reminder details", zap.Error(err))
+				return err
+			}
+		}
+
+		scheduledJob, err := h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff), work.Q{
 			jobArgOrderID:   int64(order.ID),
-			jobArgPreExpiry: true,
+			jobArgPreExpiry: false,
 		})
+
 		if err != nil {
 			l.Error("error scheduling job", zap.Error(err))
 			return err
 		}
-		err = h.Repo.UpdateReminder(context.Background(), models.UpdateReminderParams{
-			ID:            order.ID,
-			ReminderRunAt: sql.NullInt64{Int64: scheduledJob.RunAt, Valid: true},
-			ReminderID:    sql.NullString{String: scheduledJob.Job.ID, Valid: true},
+		err = h.Repo.UpdateExpiry(context.Background(), models.UpdateExpiryParams{
+			ID:          order.ID,
+			ExpiryRunAt: sql.NullInt64{Int64: scheduledJob.RunAt, Valid: true},
+			ExpiryID:    sql.NullString{String: scheduledJob.Job.ID, Valid: true},
 		})
 		if err != nil {
 			l.Error("error updating reminder details", zap.Error(err))
@@ -229,28 +271,12 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 		}
 	}
 
-	scheduledJob, err := h.Queue.EnqueueUniqueIn(string(JobNotifyExpiry), int64(diff), work.Q{
-		jobArgOrderID:   int64(order.ID),
-		jobArgPreExpiry: false,
-	})
-
-	if err != nil {
-		l.Error("error scheduling job", zap.Error(err))
-		return err
-	}
-	err = h.Repo.UpdateExpiry(context.Background(), models.UpdateExpiryParams{
-		ID:          order.ID,
-		ExpiryRunAt: sql.NullInt64{Int64: scheduledJob.RunAt, Valid: true},
-		ExpiryID:    sql.NullString{String: scheduledJob.Job.ID, Valid: true},
-	})
-	if err != nil {
-		l.Error("error updating reminder details", zap.Error(err))
-		return err
-	}
-
-	message := "Taking orders for " + title + ", ending at " + expiry
-	if isTomorrow {
-		message += " tomorrow"
+	message := "Taking orders for " + title
+	if expiryTime.Valid {
+		message = message + ", ending at " + expiry
+		if isTomorrow {
+			message += " tomorrow"
+		}
 	}
 
 	fullMessage := fmt.Sprintf(`%s
@@ -267,18 +293,7 @@ func (h *Handlers) handleNewOrder(chatID int64, text string) error {
 func (h *Handlers) handlerOrder(chatID int64, text string, user models.User) error {
 	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/order"))
 
-	location, err := getLocation()
-	if err != nil {
-		l.Error("error loading time location", zap.Error(err))
-		return err
-	}
-
-	now := time.Now().In(location)
-
-	order, err := h.Repo.GetActiveOrder(context.Background(), models.GetActiveOrderParams{
-		ChatID: int32(chatID),
-		Expiry: now,
-	})
+	order, err := h.Repo.GetActiveOrder(context.Background(), int32(chatID))
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -366,14 +381,18 @@ func (h *Handlers) sendOverview(l *zap.Logger, order models.Order, isPreExpiry b
 
 	title := order.Title
 
-	expiry := order.Expiry.Format("15:04")
-	if order.Expiry.Day() > now.Day() {
-		expiry += " tomorrow"
-	}
+	expiry := "No expiry"
+	if order.Expiry.Valid {
+		expiry = order.Expiry.Time.Format("15:04")
 
-	if isPreExpiry {
-		expiry += " in 5 minutes"
-		title = "REMINDER\n" + title
+		if order.Expiry.Time.Day() > now.Day() {
+			expiry += " tomorrow"
+		}
+
+		if isPreExpiry {
+			expiry += " in 5 minutes"
+			title = "REMINDER\n" + title
+		}
 	}
 
 	allItems := map[string]int{}
@@ -412,17 +431,7 @@ func getLocation() (*time.Location, error) {
 func (h *Handlers) handleCancelOrder(chatID int64, user models.User) error {
 	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/cancelorder"))
 
-	location, err := getLocation()
-	if err != nil {
-		l.Error("error loading time location", zap.Error(err))
-		return nil
-	}
-	now := time.Now().In(location)
-
-	order, err := h.Repo.GetActiveOrder(context.Background(), models.GetActiveOrderParams{
-		ChatID: int32(chatID),
-		Expiry: now,
-	})
+	order, err := h.Repo.GetActiveOrder(context.Background(), int32(chatID))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			h.Bot.SendMessage(chatID, false, MsgNoActiveOrders)
@@ -475,17 +484,7 @@ func (h *Handlers) handleDeleteItem(cq models.CallbackQuery) error {
 		return nil
 	}
 
-	location, err := getLocation()
-	if err != nil {
-		l.Error("error loading time location", zap.Error(err))
-		return err
-	}
-	now := time.Now().In(location)
-
-	order, err := h.Repo.GetActiveOrder(context.Background(), models.GetActiveOrderParams{
-		ChatID: int32(cq.Message.Chat.ID),
-		Expiry: now,
-	})
+	order, err := h.Repo.GetActiveOrder(context.Background(), int32(cq.Message.Chat.ID))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			h.Bot.EditMessage(cq.Message.Chat.ID, cq.Message.MessageID, MsgNoActiveOrders)

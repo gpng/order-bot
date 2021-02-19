@@ -4,7 +4,6 @@ package models
 
 import (
 	"database/sql"
-	"time"
 )
 
 type Item struct {
@@ -20,7 +19,7 @@ type Order struct {
 	ID            int32          `json:"id"`
 	ChatID        int32          `json:"chat_id"`
 	Title         string         `json:"title"`
-	Expiry        time.Time      `json:"expiry"`
+	Expiry        sql.NullTime   `json:"expiry"`
 	Active        bool           `json:"active"`
 	ReminderRunAt sql.NullInt64  `json:"reminder_run_at"`
 	ReminderID    sql.NullString `json:"reminder_id"`
