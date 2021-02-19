@@ -76,6 +76,9 @@ func (h *Handlers) handleUpdates() http.HandlerFunc {
 			case "/cancelorder", "/removeorder":
 				err = h.handleCancelOrder(chatID, update.Message.From)
 				break
+			case "/checkorder", "/checkorders":
+				err = h.handlerCheckOrder(chatID)
+				break
 			}
 
 			if err != nil {
@@ -288,6 +291,24 @@ func (h *Handlers) saveTakeOrder(l *zap.Logger, chatID int64, expiry string, exp
 	h.Bot.SendMessage(chatID, false, fullMessage)
 
 	return nil
+}
+
+func (h *Handlers) handlerCheckOrder(chatID int64) error {
+	l := h.Logger.With(zap.Int64("chat_id", chatID), zap.String("command", "/checkorder"))
+
+	order, err := h.Repo.GetActiveOrder(context.Background(), int32(chatID))
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			h.Bot.SendMessage(chatID, false, MsgNoActiveOrders)
+			return nil
+		}
+
+		l.Error("error fetching active orders", zap.Error(err))
+		return err
+	}
+
+	return h.sendOverview(l, order, false)
 }
 
 func (h *Handlers) handlerOrder(chatID int64, text string, user models.User) error {
